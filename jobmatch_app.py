@@ -3,6 +3,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import chromedriver_autoinstaller
 import csv
 import time
 import re
@@ -46,15 +49,22 @@ def parse_resume(file_path):
 
 def scrape_jobs(position, location, preference):
     """Scrape jobs from LinkedIn based on user input."""
-    def extract_experience_level(job):
-        """Extract experience level from the job description."""
+
+    def extract_experience_level(job_description):
+        """Extract experience level from the job description text."""
         try:
-            experience_text = job.text.lower()
-            match = re.search(r'\b(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior|internship)\b', experience_text)
+            experience_text = job_description.lower()
+            match = re.search(
+                r'\b(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior|internship)\b',
+                experience_text
+            )
             return match.group(0) if match else "Not specified"
         except Exception as e:
             print(f"Error extracting experience level: {e}")
             return "Not specified"
+
+    # Ensure the correct version of ChromeDriver is installed
+    chromedriver_autoinstaller.install()
 
     # Set up Selenium WebDriver with headless mode
     chrome_options = Options()
@@ -66,11 +76,15 @@ def scrape_jobs(position, location, preference):
     url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference}"
 
     driver.get(url)
-    time.sleep(5)
+
+    # Wait for jobs to load dynamically
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_all_elements_located((By.CLASS_NAME, 'base-card'))
+    )
 
     jobs = driver.find_elements(By.CLASS_NAME, 'base-card')
-
     job_data = []
+
     for job in jobs:
         try:
             title = job.find_element(By.CLASS_NAME, 'base-search-card__title').text.strip() or "N/A"
@@ -78,11 +92,20 @@ def scrape_jobs(position, location, preference):
             location = job.find_element(By.CLASS_NAME, 'job-search-card__location').text.strip() or "N/A"
             link = job.find_element(By.TAG_NAME, 'a').get_attribute('href') or "N/A"
             posted_day = job.find_element(By.CLASS_NAME, 'job-search-card__listdate').text.strip() or "N/A"
-            experience = extract_experience_level(job)
 
-            # Add only valid job entries
+            # Simulate fetching job description if available
+            job_description = f"{title} at {company} in {location}"
+            experience = extract_experience_level(job_description)
+
             if title != "N/A" and company != "N/A":
-                job_data.append({'Title': title, 'Company': company, 'Location': location, 'Link': link, 'Posted': posted_day, 'Experience': experience})
+                job_data.append({
+                    'Title': title,
+                    'Company': company,
+                    'Location': location,
+                    'Link': link,
+                    'Posted': posted_day,
+                    'Experience': experience
+                })
         except Exception as e:
             print(f"Error scraping job: {e}")
 
