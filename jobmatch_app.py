@@ -5,7 +5,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import chromedriver_autoinstaller
+from webdriver_manager.chrome import ChromeDriverManager
 import csv
 import time
 import re
@@ -63,18 +63,22 @@ def scrape_jobs(position, location, preference):
             print(f"Error extracting experience level: {e}")
             return "Not specified"
 
-    # Ensure the correct version of ChromeDriver is installed
-    chromedriver_autoinstaller.install()
-
     # Set up Selenium WebDriver with headless mode
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--disable-infobars")
 
-    driver = webdriver.Chrome(service=Service(), options=chrome_options)
+    # Install ChromeDriver and set up WebDriver
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+
+    # Build LinkedIn search URL
     url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference}"
-
+    print(f"Scraping jobs from URL: {url}")
     driver.get(url)
 
     # Wait for jobs to load dynamically
@@ -82,6 +86,7 @@ def scrape_jobs(position, location, preference):
         EC.presence_of_all_elements_located((By.CLASS_NAME, 'base-card'))
     )
 
+    # Extract job elements
     jobs = driver.find_elements(By.CLASS_NAME, 'base-card')
     job_data = []
 
@@ -93,7 +98,7 @@ def scrape_jobs(position, location, preference):
             link = job.find_element(By.TAG_NAME, 'a').get_attribute('href') or "N/A"
             posted_day = job.find_element(By.CLASS_NAME, 'job-search-card__listdate').text.strip() or "N/A"
 
-            # Simulate fetching job description if available
+            # Create a dummy job description for experience extraction
             job_description = f"{title} at {company} in {location}"
             experience = extract_experience_level(job_description)
 
@@ -111,7 +116,6 @@ def scrape_jobs(position, location, preference):
 
     driver.quit()
     return job_data
-
 
 def match_jobs_with_resume(resume_data, job_data):
     """Match jobs with the resume based on dynamically extracted skills."""
