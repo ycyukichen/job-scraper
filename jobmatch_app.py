@@ -43,43 +43,65 @@ def parse_resume(file_path):
 
 
 # Job Scraping
-def scrape_jobs(position, location):
+def scrape_jobs(position, location, preferences):
     """Scrape jobs from LinkedIn using BeautifulSoup."""
-    job_data = []
-    base_url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}"
 
-    # Send GET request to LinkedIn
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    response = requests.get(base_url, headers=headers)
-
-    if response.status_code != 200:
-        st.error(f"Failed to fetch jobs. Status Code: {response.status_code}")
-        return []
-
-    # Parse HTML content
-    soup = BeautifulSoup(response.text, "html.parser")
-    job_cards = soup.find_all("div", class_="base-card")
-
-    # Extract job information
-    for job_card in job_cards:
+    def extract_experience_level(job_description):
+        """Extract experience level from the job description text."""
         try:
-            title = job_card.find("h3", class_="base-search-card__title").get_text(strip=True)
-            company = job_card.find("h4", class_="base-search-card__subtitle").get_text(strip=True)
-            location = job_card.find("span", class_="job-search-card__location").get_text(strip=True)
-            link = job_card.find("a", class_="base-card__full-link")["href"]
-            posted_day = job_card.find("time")["datetime"] if job_card.find("time") else "Not specified"
-
-            job_data.append({
-                "Title": title,
-                "Company": company,
-                "Location": location,
-                "Link": link,
-                "Posted": posted_day
-            })
+            match = re.search(
+                r'\b(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior|internship)\b',
+                job_description.lower(),
+            )
+            return match.group(0) if match else "Not specified"
         except Exception as e:
-            st.warning(f"Error extracting job details: {e}")
+            print(f"Error extracting experience level: {e}")
+            return "Not specified"
+
+    job_data = []
+    preference_map = {"Remote": "2", "Onsite": "1", "Hybrid": "3"}
+
+    for preference in preferences:
+        base_url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference_map[preference]}"
+
+        # Send GET request to LinkedIn
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(base_url, headers=headers)
+
+        if response.status_code != 200:
+            st.error(f"Failed to fetch jobs. Status Code: {response.status_code}")
+            continue
+
+        # Parse HTML content
+        soup = BeautifulSoup(response.text, "html.parser")
+        job_cards = soup.find_all("div", class_="base-card")
+
+        # Extract job information
+        for job_card in job_cards:
+            try:
+                title = job_card.find("h3", class_="base-search-card__title").get_text(strip=True)
+                company = job_card.find("h4", class_="base-search-card__subtitle").get_text(strip=True)
+                location = job_card.find("span", class_="job-search-card__location").get_text(strip=True)
+                link = job_card.find("a", class_="base-card__full-link")["href"]
+                posted_day = job_card.find("time")["datetime"] if job_card.find("time") else "Not specified"
+
+                # Create a job description for experience extraction
+                job_description = f"{title} at {company} in {location}"
+                experience = extract_experience_level(job_description)
+
+                job_data.append({
+                    "Title": title,
+                    "Company": company,
+                    "Location": location,
+                    "Link": link,
+                    "Posted": posted_day,
+                    "Experience": experience,
+                    "Preference": preference  # Add user preference
+                })
+            except Exception as e:
+                st.warning(f"Error extracting job details: {e}")
 
     return job_data
 
@@ -115,6 +137,11 @@ def main():
     # User Inputs
     position = st.text_input("Job Title (e.g., Data Scientist, Nurse, Teacher):")
     location = st.text_input("Location (e.g., United States, New York):")
+    preferences = st.multiselect("Job Type:", ["Remote", "Onsite", "Hybrid"])
+
+    if not preferences:
+        st.warning("Please select at least one job type.")
+        return
 
     uploaded_file = st.file_uploader("Upload Your Resume (PDF):", type=["pdf"])
 
@@ -124,7 +151,7 @@ def main():
                 f.write(uploaded_file.getbuffer())
 
             resume_data = parse_resume("uploaded_resume.pdf")
-            job_data = scrape_jobs(position, location)
+            job_data = scrape_jobs(position, location, preferences)
 
             if not job_data:
                 st.error("No jobs found. Please try different criteria.")
@@ -139,6 +166,8 @@ def main():
                     "Location": match["Job"]["Location"],
                     "Link": match["Job"]["Link"],
                     "Posted": match["Job"]["Posted"],
+                    "Experience": match["Job"]["Experience"],
+                    "Preference": match["Job"]["Preference"],
                     "Similarity": f"{match['Similarity']:.2f}"
                 }
                 for match in matched_jobs[:50]
