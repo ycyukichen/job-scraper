@@ -10,6 +10,7 @@ from PyPDF2 import PdfReader
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import spacy
+from spacy.cli import download
 import pandas as pd
 
 # Load spaCy model
@@ -123,7 +124,7 @@ def match_jobs_with_resume(resume_data, job_data):
 
 def main():
     st.markdown("""
-    ## Welcome to the Universal Job Scraper
+    ## Welcome to the LinkedIn Job Scraper
     This application helps you find and match jobs from LinkedIn across all industries based on your resume and preferences. 
     Upload your resume and provide the job title, location, and preferences (e.g., remote, onsite, or hybrid). 
     The system dynamically extracts your skills and matches them with job descriptions.
