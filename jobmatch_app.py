@@ -1,6 +1,5 @@
 import streamlit as st
-import asyncio
-from pyppeteer import launch
+from playwright.sync_api import sync_playwright
 import re
 import pandas as pd
 from PyPDF2 import PdfReader
@@ -43,10 +42,10 @@ def parse_resume(file_path):
 
 
 # Job Scraping
-async def scrape_jobs_async(position, location, preference):
-    """Scrape jobs from LinkedIn using Pyppeteer."""
+def scrape_jobs(position, location, preference):
+    """Scrape jobs from LinkedIn using Playwright."""
 
-    async def extract_experience_level(job_description):
+    def extract_experience_level(job_description):
         """Extract experience level from the job description."""
         try:
             match = re.search(
@@ -58,59 +57,47 @@ async def scrape_jobs_async(position, location, preference):
             print(f"Error extracting experience level: {e}")
             return "Not specified"
 
-    # Launch Chromium browser in headless mode
-    browser = await launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-    page = await browser.newPage()
-
-    # Construct LinkedIn job search URL
-    url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference}"
-    print(f"Scraping jobs from URL: {url}")
-    await page.goto(url, {"waitUntil": "networkidle2"})
-
-    # Wait for job cards to load
-    await page.waitForSelector(".base-card")
-
-    # Extract job postings
-    jobs = await page.querySelectorAll(".base-card")
     job_data = []
 
-    for job in jobs:
-        try:
-            title = await (await (await job.querySelector(".base-search-card__title")).getProperty("textContent")).jsonValue()
-            company = await (await (await job.querySelector(".base-search-card__subtitle")).getProperty("textContent")).jsonValue()
-            location = await (await (await job.querySelector(".job-search-card__location")).getProperty("textContent")).jsonValue()
-            link = await (await (await job.querySelector("a")).getProperty("href")).jsonValue()
-            posted_day = await (await (await job.querySelector(".job-search-card__listdate")).getProperty("textContent")).jsonValue()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
-            # Clean and format extracted data
-            title = title.strip() if title else "N/A"
-            company = company.strip() if company else "N/A"
-            location = location.strip() if location else "N/A"
-            posted_day = posted_day.strip() if posted_day else "N/A"
+        # Build LinkedIn search URL
+        url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference}"
+        print(f"Scraping jobs from URL: {url}")
+        page.goto(url)
+        page.wait_for_selector(".base-card")
 
-            # Create a job description for experience extraction
-            job_description = f"{title} at {company} in {location}"
-            experience = await extract_experience_level(job_description)
+        # Extract job listings
+        jobs = page.query_selector_all(".base-card")
+        for job in jobs:
+            try:
+                title = job.query_selector(".base-search-card__title").inner_text().strip() or "N/A"
+                company = job.query_selector(".base-search-card__subtitle").inner_text().strip() or "N/A"
+                location = job.query_selector(".job-search-card__location").inner_text().strip() or "N/A"
+                link = job.query_selector("a").get_attribute("href") or "N/A"
+                posted_day = job.query_selector(".job-search-card__listdate").inner_text().strip() or "N/A"
 
-            if title != "N/A" and company != "N/A":
-                job_data.append({
-                    "Title": title,
-                    "Company": company,
-                    "Location": location,
-                    "Link": link,
-                    "Posted": posted_day,
-                    "Experience": experience,
-                })
-        except Exception as e:
-            print(f"Error scraping job: {e}")
+                # Create a job description for experience extraction
+                job_description = f"{title} at {company} in {location}"
+                experience = extract_experience_level(job_description)
 
-    await browser.close()
+                if title != "N/A" and company != "N/A":
+                    job_data.append({
+                        "Title": title,
+                        "Company": company,
+                        "Location": location,
+                        "Link": link,
+                        "Posted": posted_day,
+                        "Experience": experience,
+                    })
+            except Exception as e:
+                print(f"Error scraping job: {e}")
+
+        browser.close()
+
     return job_data
-
-
-def scrape_jobs(position, location, preference):
-    """Wrapper for the async job scraper."""
-    return asyncio.run(scrape_jobs_async(position, location, preference))
 
 
 # Job Matching

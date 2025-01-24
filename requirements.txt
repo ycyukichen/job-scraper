@@ -1,5 +1,5 @@
 streamlit==1.41.1
-pyppeteer==1.0.2
+playwright==1.35.0
 PyPDF2==3.0.1
 pandas==2.0.3
 scikit-learn==1.1.3
