@@ -4,7 +4,5 @@ PyPDF2
 pandas
 scikit-learn
 spacy==3.4.4
+thinc==8.1.0
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.4.0/en_core_web_sm-3.4.0.tar.gz
-thinc==8.0.17
-numpy==1.23.5
-pydantic<2.0
