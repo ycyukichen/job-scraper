@@ -1,26 +1,26 @@
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-import undetected_chromedriver.v2 as uc
+from webdriver_manager.chrome import ChromeDriverManager
 import csv
-import time
 import re
+import pandas as pd
 from PyPDF2 import PdfReader
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import spacy
 from spacy.cli import download
-import pandas as pd
 
 # Load spaCy model
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
-    print("Downloading 'en_core_web_sm' model...")
     download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
 
+# Resume Parsing
 def parse_resume(file_path):
     """Parse the resume and dynamically extract skills and experience."""
     reader = PdfReader(file_path)
@@ -35,7 +35,7 @@ def parse_resume(file_path):
     doc = nlp(text)
     skills = set()
     for ent in doc.ents:
-        if ent.label_ in ["SKILL", "ORG", "PRODUCT"]:  # Dynamically extract skills or relevant terms
+        if ent.label_ in ["SKILL", "ORG", "PRODUCT"]:
             skills.add(ent.text.lower())
 
     # Extract experience
@@ -44,51 +44,50 @@ def parse_resume(file_path):
 
     return {'skills': list(skills), 'experience': experience, 'text': text}
 
+# Job Scraping
 def scrape_jobs(position, location, preference):
     """Scrape jobs from LinkedIn based on user input."""
 
     def extract_experience_level(job_description):
         """Extract experience level from the job description text."""
         try:
-            experience_text = job_description.lower()
             match = re.search(
                 r'\b(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior|internship)\b',
-                experience_text
+                job_description.lower(),
             )
             return match.group(0) if match else "Not specified"
         except Exception as e:
             print(f"Error extracting experience level: {e}")
             return "Not specified"
 
-    # Set up options for headless mode
+    # Set up Selenium WebDriver with headless mode
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-extensions")
 
-    # Use undetected-chromedriver for seamless Chromium setup
-    driver = uc.Chrome(options=chrome_options)
+    # Initialize WebDriver
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
+    )
 
-    # Construct LinkedIn URL
     url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference}"
-    print(f"Scraping URL: {url}")
     driver.get(url)
 
-    # Wait for page to load
-    jobs = driver.find_elements_by_class_name('base-card')
+    # Scrape job listings
+    jobs = driver.find_elements(By.CLASS_NAME, 'base-card')
     job_data = []
 
     for job in jobs:
         try:
-            title = job.find_element_by_class_name('base-search-card__title').text.strip() or "N/A"
-            company = job.find_element_by_class_name('base-search-card__subtitle').text.strip() or "N/A"
-            location = job.find_element_by_class_name('job-search-card__location').text.strip() or "N/A"
-            link = job.find_element_by_tag_name('a').get_attribute('href') or "N/A"
-            posted_day = job.find_element_by_class_name('job-search-card__listdate').text.strip() or "N/A"
+            title = job.find_element(By.CLASS_NAME, 'base-search-card__title').text.strip() or "N/A"
+            company = job.find_element(By.CLASS_NAME, 'base-search-card__subtitle').text.strip() or "N/A"
+            location = job.find_element(By.CLASS_NAME, 'job-search-card__location').text.strip() or "N/A"
+            link = job.find_element(By.TAG_NAME, 'a').get_attribute('href') or "N/A"
+            posted_day = job.find_element(By.CLASS_NAME, 'job-search-card__listdate').text.strip() or "N/A"
 
-            # Simulate fetching job description for experience extraction
+            # Create a job description for experience extraction
             job_description = f"{title} at {company} in {location}"
             experience = extract_experience_level(job_description)
 
@@ -107,98 +106,75 @@ def scrape_jobs(position, location, preference):
     driver.quit()
     return job_data
 
+# Job Matching
 def match_jobs_with_resume(resume_data, job_data):
     """Match jobs with the resume based on dynamically extracted skills."""
     results = []
     resume_skills_text = " ".join(resume_data['skills']).lower()
 
-    if not resume_skills_text:
-        print("Error: Resume skills are empty.")
-        return results
-
     for job in job_data:
-        # Combine job fields to form job description text
         job_text = f"{job['Title']} {job['Company']} {job['Location']} {job['Posted']}".lower()
         job_text = re.sub(r"[^a-zA-Z0-9\s]", "", job_text.strip())
 
-        if not job_text:
-            print("Warning: Job text is empty for a listing.")
-            continue
-
-        try:
-            # Match dynamically extracted resume skills with the job description
-            vectorizer = CountVectorizer(stop_words='english')
-            vectors = vectorizer.fit_transform([resume_skills_text, job_text])
-            similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
-        except Exception as e:
-            print(f"Error calculating similarity: {e}")
-            similarity = 0.0
+        vectorizer = CountVectorizer(stop_words='english')
+        vectors = vectorizer.fit_transform([resume_skills_text, job_text])
+        similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
 
         job['Similarity'] = similarity
         results.append({'Job': job, 'Similarity': similarity})
 
     return sorted(results, key=lambda x: x['Similarity'], reverse=True)
 
+# Streamlit App
 def main():
+    st.title("LinkedIn Job Scraper & Matcher")
     st.markdown("""
-    ## Welcome to the LinkedIn Job Scraper
-    This application helps you find and match jobs from LinkedIn across all industries based on your resume and preferences. 
-    Upload your resume and provide the job title, location, and preferences (e.g., remote, onsite, or hybrid). 
-    The system dynamically extracts your skills and matches them with job descriptions.
+    This app helps you find and match jobs on LinkedIn based on your resume and preferences.
+    Upload your resume, specify job criteria, and get a list of top-matched jobs.
     """)
 
-    st.title("What are you looking for?")
-
-    # User inputs
-    position = st.text_input("Enter the job position (e.g., Nurse, Teacher, Engineer, etc.): *")
-    location = st.text_input("Enter the location (e.g., United States, New York, etc.): *")
-    preference = st.multiselect("Select your preference (multiple allowed): *", ["Remote", "Onsite", "Hybrid"])
+    # User Inputs
+    position = st.text_input("Job Title (e.g., Data Scientist, Nurse, Teacher):")
+    location = st.text_input("Location (e.g., United States, New York):")
+    preference = st.multiselect("Job Type:", ["Remote", "Onsite", "Hybrid"])
 
     if not preference:
-        st.warning("Please select at least one preference.")
+        st.warning("Please select at least one job type.")
         return
 
-    preference_map = {"Remote": "2", "Onsite": "1", "Hybrid": "3"}
-    preference_codes = [preference_map[pref] for pref in preference]
-
-    uploaded_file = st.file_uploader("Upload your resume (PDF only): *", type=["pdf"])
+    uploaded_file = st.file_uploader("Upload Your Resume (PDF):", type=["pdf"])
 
     if st.button("Find Jobs"):
         if uploaded_file and position and location:
-            # Save uploaded file temporarily
             with open("uploaded_resume.pdf", "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            # Parse the resume dynamically without predefined skills
             resume_data = parse_resume("uploaded_resume.pdf")
 
-            # Scrape jobs for all preferences
             job_data = []
-            for pref_code in preference_codes:
-                st.write(f"Scraping jobs with preference: {pref_code}. This may take a few moments...")
+            for pref in preference:
+                preference_map = {"Remote": "2", "Onsite": "1", "Hybrid": "3"}
+                pref_code = preference_map[pref]
                 job_data += scrape_jobs(position, location, pref_code)
 
-            # Match jobs with resume
             matched_jobs = match_jobs_with_resume(resume_data, job_data)
 
-            # Display results
-            st.subheader("Top Job Matches")
             results_df = pd.DataFrame([
                 {
-                    "Title": match["Job"].get("Title", "N/A"),
-                    "Company": match["Job"].get("Company", "N/A"),
-                    "Location": match["Job"].get("Location", "N/A"),
-                    "Link": match["Job"].get("Link", "N/A"),
-                    "Posted": match["Job"].get("Posted", "N/A"),
-                    "Experience": match["Job"].get("Experience", "Not specified"),
+                    "Title": match["Job"]["Title"],
+                    "Company": match["Job"]["Company"],
+                    "Location": match["Job"]["Location"],
+                    "Link": match["Job"]["Link"],
+                    "Posted": match["Job"]["Posted"],
+                    "Experience": match["Job"]["Experience"],
                     "Similarity": f"{match['Similarity']:.2f}"
                 }
                 for match in matched_jobs[:50]
             ])
 
+            st.subheader("Top Job Matches")
             st.dataframe(results_df)
 
-            # Option to download results
             csv = results_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="Download Results",
@@ -207,8 +183,7 @@ def main():
                 mime="text/csv",
             )
         else:
-            st.error("Please fill all inputs and upload a valid resume!")
+            st.error("Please fill all fields and upload a valid resume.")
 
 if __name__ == "__main__":
     main()
-
