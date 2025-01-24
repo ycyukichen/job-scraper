@@ -1,10 +1,6 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-import csv
+import asyncio
+from pyppeteer import launch
 import re
 import pandas as pd
 from PyPDF2 import PdfReader
@@ -19,6 +15,7 @@ try:
 except OSError:
     download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
+
 
 # Resume Parsing
 def parse_resume(file_path):
@@ -44,12 +41,13 @@ def parse_resume(file_path):
 
     return {'skills': list(skills), 'experience': experience, 'text': text}
 
-# Job Scraping
-def scrape_jobs(position, location, preference):
-    """Scrape jobs from LinkedIn based on user input."""
 
-    def extract_experience_level(job_description):
-        """Extract experience level from the job description text."""
+# Job Scraping
+async def scrape_jobs_async(position, location, preference):
+    """Scrape jobs from LinkedIn using Pyppeteer."""
+
+    async def extract_experience_level(job_description):
+        """Extract experience level from the job description."""
         try:
             match = re.search(
                 r'\b(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior|internship)\b',
@@ -60,51 +58,60 @@ def scrape_jobs(position, location, preference):
             print(f"Error extracting experience level: {e}")
             return "Not specified"
 
-    # Set up Selenium WebDriver with headless mode
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    # Launch Chromium browser in headless mode
+    browser = await launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+    page = await browser.newPage()
 
-    # Initialize WebDriver
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=chrome_options
-    )
-
+    # Construct LinkedIn job search URL
     url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={preference}"
-    driver.get(url)
+    print(f"Scraping jobs from URL: {url}")
+    await page.goto(url, {"waitUntil": "networkidle2"})
 
-    # Scrape job listings
-    jobs = driver.find_elements(By.CLASS_NAME, 'base-card')
+    # Wait for job cards to load
+    await page.waitForSelector(".base-card")
+
+    # Extract job postings
+    jobs = await page.querySelectorAll(".base-card")
     job_data = []
 
     for job in jobs:
         try:
-            title = job.find_element(By.CLASS_NAME, 'base-search-card__title').text.strip() or "N/A"
-            company = job.find_element(By.CLASS_NAME, 'base-search-card__subtitle').text.strip() or "N/A"
-            location = job.find_element(By.CLASS_NAME, 'job-search-card__location').text.strip() or "N/A"
-            link = job.find_element(By.TAG_NAME, 'a').get_attribute('href') or "N/A"
-            posted_day = job.find_element(By.CLASS_NAME, 'job-search-card__listdate').text.strip() or "N/A"
+            title = await (await (await job.querySelector(".base-search-card__title")).getProperty("textContent")).jsonValue()
+            company = await (await (await job.querySelector(".base-search-card__subtitle")).getProperty("textContent")).jsonValue()
+            location = await (await (await job.querySelector(".job-search-card__location")).getProperty("textContent")).jsonValue()
+            link = await (await (await job.querySelector("a")).getProperty("href")).jsonValue()
+            posted_day = await (await (await job.querySelector(".job-search-card__listdate")).getProperty("textContent")).jsonValue()
+
+            # Clean and format extracted data
+            title = title.strip() if title else "N/A"
+            company = company.strip() if company else "N/A"
+            location = location.strip() if location else "N/A"
+            posted_day = posted_day.strip() if posted_day else "N/A"
 
             # Create a job description for experience extraction
             job_description = f"{title} at {company} in {location}"
-            experience = extract_experience_level(job_description)
+            experience = await extract_experience_level(job_description)
 
             if title != "N/A" and company != "N/A":
                 job_data.append({
-                    'Title': title,
-                    'Company': company,
-                    'Location': location,
-                    'Link': link,
-                    'Posted': posted_day,
-                    'Experience': experience
+                    "Title": title,
+                    "Company": company,
+                    "Location": location,
+                    "Link": link,
+                    "Posted": posted_day,
+                    "Experience": experience,
                 })
         except Exception as e:
             print(f"Error scraping job: {e}")
 
-    driver.quit()
+    await browser.close()
     return job_data
+
+
+def scrape_jobs(position, location, preference):
+    """Wrapper for the async job scraper."""
+    return asyncio.run(scrape_jobs_async(position, location, preference))
+
 
 # Job Matching
 def match_jobs_with_resume(resume_data, job_data):
@@ -124,6 +131,7 @@ def match_jobs_with_resume(resume_data, job_data):
         results.append({'Job': job, 'Similarity': similarity})
 
     return sorted(results, key=lambda x: x['Similarity'], reverse=True)
+
 
 # Streamlit App
 def main():
@@ -184,6 +192,7 @@ def main():
             )
         else:
             st.error("Please fill all fields and upload a valid resume.")
+
 
 if __name__ == "__main__":
     main()
