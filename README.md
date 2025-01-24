@@ -24,6 +24,7 @@ A dynamic web application that enables users to find and match job opportunities
    - Job Title
    - Company
    - Location
+   - Link
    - Posted Date
    - Experience Level
    - Preference Type
