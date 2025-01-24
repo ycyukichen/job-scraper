@@ -1,8 +1,8 @@
 streamlit
 selenium
 PyPDF2
-spacy==3.5.0
+spacy==3.4.4
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.4.0/en_core_web_sm-3.4.0.tar.gz
+thinc==8.0.17
 scikit-learn
 pandas
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0.tar.gz
-thinc==8.1.8
