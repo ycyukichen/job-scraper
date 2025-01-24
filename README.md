@@ -42,7 +42,7 @@ A dynamic web application that enables users to find and match job opportunities
    Install the required Python packages:
 
    ```bash
-   pip install -r r
+   pip install -r requirements.txt
    ```
 
 3. requirements.txt**Set Up ChromeDriver**:
