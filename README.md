@@ -52,7 +52,7 @@ A dynamic web application that enables users to find and match job opportunities
    Start the Streamlit app:
 
    ```bash
-   streamlit run jobmatch_chatbot.py
+   streamlit run jobmatch_app.py
    ```
 
 ---
@@ -83,7 +83,7 @@ The project uses the following Python libraries:
 
 1. **Launch the Application**:
 
-   - Start the app with the command: `streamlit run jobmatch_chatbot.py`.
+   - Start the app with the command: `streamlit run jobmatch_app.py`.
 
 2. **Upload Resume**:
 
