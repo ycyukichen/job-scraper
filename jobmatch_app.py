@@ -124,7 +124,7 @@ def main():
     The system dynamically extracts your skills and matches them with job descriptions.
     """)
 
-    st.title("Job Scraper with Resume Matching")
+    st.title("What are you looking for?")
 
     # User inputs
     position = st.text_input("Enter the job position (e.g., Nurse, Teacher, Engineer, etc.): *")
