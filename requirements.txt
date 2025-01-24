@@ -1,5 +1,6 @@
 streamlit==1.41.1
-playwright==1.35.0
+beautifulsoup4==4.12.2
+requests==2.28.1
 PyPDF2==3.0.1
 pandas==2.0.3
 scikit-learn==1.1.3
