@@ -144,11 +144,17 @@ class LinkedInJobScraper:
     def parse_job_card(self, card: BeautifulSoup, preference: str) -> Union[JobPosting, None]:
         """Parse individual job card with error handling"""
         try:
-            title = card.find("h3", class_="base-search-card__title").get_text(strip=True)
-            company = card.find("h4", class_="base-search-card__subtitle").get_text(strip=True)
-            location = card.find("span", class_="job-search-card__location").get_text(strip=True)
-            link = card.find("a", class_="base-card__full-link")["href"]
+            title = card.find("h3", class_="base-search-card__title")
+            company = card.find("h4", class_="base-search-card__subtitle")
+            location = card.find("span", class_="job-search-card__location")
+            link = card.find("a", class_="base-card__full-link")
             posted_date = card.find("time")["datetime"] if card.find("time") else "Not specified"
+            
+            # Use `.get_text(strip=True)` only if the element exists, else provide fallback
+            title = title.get_text(strip=True) if title else "Title not found"
+            company = company.get_text(strip=True) if company else "Company not found"
+            location = location.get_text(strip=True) if location else "Location not found"
+            link = link["href"] if link else "Link not available"
             
             # Extract experience requirements
             job_description = f"{title} at {company} in {location}"
@@ -156,7 +162,7 @@ class LinkedInJobScraper:
                 r"(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior)",
                 job_description.lower()
             )
-            experience = experience_match.group(0) if experience_match else "Not specified"
+            experience = experience_match.group(0) if experience_match else "Experience not specified"
             
             return JobPosting(
                 title=title,
@@ -449,12 +455,12 @@ def create_streamlit_app():
             
             results_df = pd.DataFrame([{
                 "Match Score": f"{job.similarity * 100:.0f}%",
-                "Posted": job.posted_date,
-                "Title": job.title,
-                "Company": job.company,
-                "Location": job.location,
-                "Type": job.preference,                
-                "Link": job.link  # Changed to just store the URL
+                "Posted": job.posted_date if job.posted_date else "N/A",
+                "Title": job.title if job.title else "N/A",
+                "Company": job.company if job.company else "N/A",
+                "Location": job.location if job.location else "N/A",
+                "Type": job.preference if job.preference else "N/A",
+                "Link": job.link if job.link else "N/A"
             } for job in matched_jobs[:50]])
             
             # Create a styled version of the dataframe
