@@ -16,6 +16,7 @@ from datetime import datetime
 import os
 import time
 from functools import lru_cache
+import logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -191,15 +192,18 @@ class LinkedInJobScraper:
             html_content = self.get_job_page(base_url)
             if not html_content:
                 continue
-                
+                    
             soup = BeautifulSoup(html_content, "html.parser")
             job_cards = soup.find_all("div", class_="base-card")
             
             for card in job_cards:
                 if job := self.parse_job_card(card, preference):
                     jobs.append(job)
+                else:
+                    logger.warning(f"Skipped a job card due to parsing issues.")  # Fallback and log the issue
                     
         return jobs
+
 
 class JobMatcher:
     """Enhanced job matching with multiple scoring factors"""
@@ -469,10 +473,9 @@ def create_streamlit_app():
             # Display the dataframe
             st.dataframe(
                 data=results_df,
-                #column_config={
-                    #"Link": st.column_config.LinkColumn("Job Link")
-                #},
-                use_container_width=True,
+                column_config={
+                    "Link": st.column_config.LinkColumn("Job Link")
+                },
                 hide_index=True
             )
             
