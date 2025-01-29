@@ -1,34 +1,32 @@
 # Job Scraper with Resume Matching
 
-A dynamic web application that enables users to find and match job opportunities from LinkedIn with their resumes. The application uses Natural Language Processing (NLP) to extract skills and experience from resumes and dynamically matches them with job descriptions. It is industry-agnostic and works for all types of job seekers.
+A dynamic web application that enables users to find and match job opportunities from LinkedIn with their resumes. The application uses natural language processing and machine learning techniques to provide intelligent job matching based on skills, experience, and preferences.
 
 ## Features
 
-- **Dynamic Skill Extraction**: Uses NLP to extract skills and experience directly from user resumes.
-- **Job Scraping**: Retrieves job postings from LinkedIn based on user input (position, location, and preference).
-- **Resume Matching**: Calculates similarity scores between the resume and job descriptions using vectorization.
-- **Experience Level Identification**: Extracts required experience levels from job postings (e.g., `2-5 years`, `Mid-level`).
-- **Preference-Based Filtering**: Filters job postings based on user-selected preferences (`Remote`, `Onsite`, `Hybrid`).
+- **Resume Analysis**: Supports both PDF and DOCX format resumes.
+- **Intelligent Matching**: Uses advanced algorithms to match your skills and experience with job requirements.
+- **Customizable Search**: Filter by job type (Remote, Hybrid, Onsite) and location.
+- **Interactive Results**: View matched jobs with similarity scores and direct links.
 - **Downloadable Results**: Provides an option to download the top-matched jobs as a CSV file.
 - **Streamlit Deployment**: The app can also be accessed directly via [this link](https://linkedinjob-scraper.streamlit.app/).
 
 ---
 
-## How It Works
+## Features
 
 1. **Upload Resume**: Users upload their resumes in PDF format.
-2. **Specify Job Search Criteria**: Users enter job position, location, and preferences (e.g., Remote, Onsite, Hybrid).
+2. **Specify Job Search Criteria**: Users enter job position, location, preferences (e.g., Remote, Onsite, Hybrid), and years of experience.
 3. **Job Scraping**: The application scrapes LinkedIn job postings based on the specified criteria.
 4. **Resume Matching**: Extracted skills and experience from the resume are compared to job descriptions using a similarity algorithm.
 5. **Results Displayed**: Top-matched jobs are displayed along with the following details:
+   - Match Score
+   - Posted Date
    - Job Title
    - Company
    - Location
+   - Type
    - Link
-   - Posted Date
-   - Experience Level
-   - Preference Type
-   - Similarity Score
 6. **Download Results**: Option to download the top matches as a CSV file.
 
 ---
@@ -60,22 +58,52 @@ A dynamic web application that enables users to find and match job opportunities
 
 ## Project Files
 
-- **`jobmatch_app.py`**: Main application code that integrates job scraping, resume parsing, and similarity matching.
-- **`requirements.txt`**: List of dependencies for the project.
+- **`jobmatch_app.py`**: Main application code that integrates job scraping, resume parsing, and similarity matching
+- **`requirements.txt`**: List of dependencies for the project
 
 ---
 
-## Dependencies
+## How It Works
+### Resume Processing
 
-The project uses the following Python libraries:
+- Extracts key information from your resume using natural language processing
+- Identifies skills, experience level, and education
+- Creates a structured profile for matching
 
-- `streamlit`: For building the web interface.
-- `requests`: For sending HTTP requests to LinkedIn job search pages.
-- `beautifulsoup4`: For parsing HTML content from LinkedIn job search pages.
-- `PyPDF2`: For extracting text from PDF resumes.
-- `spacy`: For NLP-based skill extraction.
-- `sklearn`: For calculating similarity scores using vectorization.
-- `pandas`: For handling job data and generating results.
+### Job Matching Algorithm
+The matching algorithm considers multiple factors:
+
+- Skill match (40%): Analyzes technical, soft, domain, and certification skills
+- Experience match (25%): Compares your experience with job requirements
+- Content similarity (20%): Uses TF-IDF vectorization for text comparison
+- Location match (15%): Considers location preferences and remote options
+
+### Job Scraping
+
+- Fetches recent job postings from LinkedIn
+- Implements rate limiting to prevent blocking
+- Handles pagination and error recovery
+
+### Best Practices for Use
+
+1. **Resume Optimization**
+   - Include a clear skills section
+   - List relevant technical and soft skills
+   - Specify years of experience clearly
+   - Include education details
+
+
+2. **Search Tips**
+   - Start with broader location searches
+   - Try different job title variations
+   - Select multiple work preferences for more results
+
+### Limitations
+
+- LinkedIn's job posting format changes may affect scraping
+- Rate limiting may slow down large searches
+- Resume parsing accuracy depends on document formatting
+- Results limited to publicly available LinkedIn job posts
 
 ---
 
@@ -92,7 +120,7 @@ The project uses the following Python libraries:
 
 3. **Input Job Criteria**:
 
-   - Enter job title, location, and preferences (e.g., Remote, Onsite, Hybrid).
+   - Enter job title, location, preferences (e.g., Remote, Onsite, Hybrid) and years of experience.
 
 4. **View and Download Results**:
 
@@ -106,12 +134,25 @@ The project uses the following Python libraries:
 
 **Sample Result:**
 
-| Title                | Company           | Location     | Link          | Posted     | Experience | Preference | Similarity |
-| -------------------- | ----------------- | ------------ |---------------| ---------- | ---------- | ---------- | ---------- |
-| Data Scientist       | Tech Solutions    | New York, NY | Link to job   | 1 day ago  | 2-5 years  | Remote     | 0.87       |
-| Machine Learning Eng | Insight Analytics | Boston, MA   | Link to job   | 2 days ago | Mid-level  | Hybrid     | 0.85       |
+| Similarity | Posted     | Title                | Company           | Location     | Type     | Link         | 
+| ---------- | ---------- | ---------------------| ----------------- |------------- | -------- | ------------ | 
+| 0.87       | 2024-12-22 | Data Scientist       | Tech Solutions    | New York, NY | Remote   | Link to job  |
+| 0.85       | 2025-01-16 | Machine Learning Eng | Insight Analytics | Boston, MA   | Hybrid   | Link to job  |
 
 ---
 
+## Disclaimer
 
+This tool is for educational purposes and personal use. Please respect LinkedIn's terms of service and rate limiting when using this application. This is not affiliated with or endorsed by LinkedIn.
 
+---
+
+## Acknowledgments
+
+- LinkedIn for providing job posting data
+- Streamlit for the web framework
+- spaCy for NLP capabilities
+- scikit-learn for ML functionality
+
+## Project Status
+Active development - Contributions and feedback welcome
