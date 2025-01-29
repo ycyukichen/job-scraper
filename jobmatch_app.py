@@ -469,9 +469,10 @@ def create_streamlit_app():
             # Display the dataframe
             st.dataframe(
                 data=results_df,
-                column_config={
-                    "Link": st.column_config.LinkColumn("Job Link")
-                },
+                #column_config={
+                    #"Link": st.column_config.LinkColumn("Job Link")
+                #},
+                use_container_width=True,
                 hide_index=True
             )
             
