@@ -15,8 +15,8 @@ A dynamic web application that enables users to find and match job opportunities
 
 ## Features
 
-1. **Upload Resume**: Users upload their resumes in PDF format.
-2. **Specify Job Search Criteria**: Users enter job position, location, preferences (e.g., Remote, Onsite, Hybrid), and years of experience.
+1. **Upload Resume**: Users upload their resumes in PDF or DOCX format.
+2. **Specify Job Search Criteria**: Users enter job title, location, preferences (e.g., Remote, Onsite, Hybrid), and years of experience.
 3. **Job Scraping**: The application scrapes LinkedIn job postings based on the specified criteria.
 4. **Resume Matching**: Extracted skills and experience from the resume are compared to job descriptions using a similarity algorithm.
 5. **Results Displayed**: Top-matched jobs are displayed along with the following details:
