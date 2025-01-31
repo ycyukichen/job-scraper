@@ -460,7 +460,7 @@ def create_streamlit_app():
             results_df = pd.DataFrame([{
                 "Match Score": f"{job.similarity * 100:.0f}%",
                 "Posted": job.posted_date if job.posted_date else "N/A",
-                "Title": job.title if job.title else "N/A",
+                "Title": job.title.replace("*", "\\*") if job.title else "N/A",
                 "Company": job.company if job.company else "N/A",
                 "Location": job.location if job.location else "N/A",
                 "Type": job.preference if job.preference else "N/A",
