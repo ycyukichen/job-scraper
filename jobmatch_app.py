@@ -12,12 +12,9 @@ from spacy.cli import download
 import logging
 from typing import Dict, List, Union
 from dataclasses import dataclass
-from datetime import datetime
 import os
 import time
 from functools import lru_cache
-import logging
-import html
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ResumeData:
-    """Data structure for parsed resume information"""
+    """Structure for parsed resume information"""
     skills: List[str]
     experience: int
     education: str
@@ -33,7 +30,7 @@ class ResumeData:
 
 @dataclass
 class JobPosting:
-    """Data structure for job posting information"""
+    """Structure for job posting information"""
     title: str
     company: str
     location: str
@@ -54,118 +51,126 @@ class ResumeParser:
             self.nlp = spacy.load("en_core_web_sm")
 
     @staticmethod
-    def read_file_content(file_path: str, file_type: str) -> str:
-        """Read content from PDF or DOCX file"""
+    def read_file(file_path: str, file_type: str) -> str:
+        """Read content from PDF/DOCX files"""
         try:
             if file_type == "pdf":
                 reader = PdfReader(file_path)
                 return " ".join([page.extract_text() for page in reader.pages])
             elif file_type == "docx":
-                document = Document(file_path)
-                return "\n".join([para.text for para in document.paragraphs])
+                doc = Document(file_path)
+                return "\n".join([para.text for para in doc.paragraphs])
         except Exception as e:
-            logger.error(f"Error reading file: {e}")
+            logger.error(f"File read error: {e}")
             raise
 
-    def extract_keywords(self, text: str) -> List[str]:
-        """Extract relevant keywords using spaCy with improved filtering"""
+    def extract_skills(self, text: str) -> List[str]:
+        """Extract skills with spaCy NLP"""
         doc = self.nlp(text.lower())
-        keywords = set()
+        skills = set()
         
-        # Include both single tokens and key phrases
+        # Extract tokens and noun phrases
         for token in doc:
-            if (token.is_alpha and not token.is_stop and len(token.text) > 2):
-                keywords.add(token.lemma_)
+            if token.is_alpha and not token.is_stop and len(token.text) > 2:
+                skills.add(token.lemma_)
         
-        # Extract noun phrases
         for chunk in doc.noun_chunks:
-            if len(chunk.text) > 2:
-                keywords.add(chunk.text.lower())
+            clean_chunk = re.sub(r'\s+', ' ', chunk.text).strip()
+            if len(clean_chunk) > 2:
+                skills.add(clean_chunk)
                 
-        return list(keywords)
+        return list(skills)
 
     def parse_resume(self, file_path: str, file_type: str) -> ResumeData:
-        """Parse resume and extract structured information"""
-        text = self.read_file_content(file_path, file_type)
-        clean_text = re.sub(r"[^a-zA-Z0-9\s]", "", text.lower()).strip()
+        """Parse resume with enhanced extraction"""
+        text = self.read_file(file_path, file_type)
+        clean_text = re.sub(r'\s+', ' ', text).strip()
         
-        skills = self.extract_keywords(text)
-        
-        # Enhanced experience extraction
-        experience_patterns = [
-            r"(\d+)\s*(?:\+\s*)?years?(?:\s+of)?\s+experience",
-            r"(?:worked|working)\s+(?:for|since)\s+(\d+)\s+years",
+        return ResumeData(
+            skills=self.extract_skills(clean_text),
+            experience=self._extract_experience(clean_text),
+            education=self._extract_education(clean_text),
+            text=clean_text
+        )
+
+    def _extract_experience(self, text: str) -> int:
+        """Extract years of experience"""
+        patterns = [
+            r'(\d+)\s*(?:years?|yrs?)(?:\s+of)?\s+experience',
+            r'experience:\s*(\d+)\s*[+]?',
+            r'worked\s+(\d+)\s+years'
         ]
-        
-        experience = 0
-        for pattern in experience_patterns:
+        for pattern in patterns:
             if match := re.search(pattern, text, re.IGNORECASE):
-                experience = int(match.group(1))
-                break
-        
-        # Enhanced education detection
-        education_levels = {
-            "phd": "PhD",
-            "doctorate": "PhD",
-            "master": "Master's",
-            "mba": "Master's",
-            "bachelor": "Bachelor's",
-            "associate": "Associate's"
+                return int(match.group(1))
+        return 0
+
+    def _extract_education(self, text: str) -> str:
+        """Extract education level"""
+        levels = {
+            'phd': 'PhD', 
+            'master': "Master's",
+            'bachelor': "Bachelor's",
+            'associate': "Associate's"
         }
-        
-        education = "Not specified"
-        for key, value in education_levels.items():
-            if key in clean_text:
-                education = value
-                break
-                
-        return ResumeData(skills=skills, experience=experience, 
-                         education=education, text=clean_text)
+        for key in levels:
+            if re.search(rf'\b{key}\b', text, re.IGNORECASE):
+                return levels[key]
+        return 'Not specified'
 
 class LinkedInJobScraper:
-    """Handles job scraping from LinkedIn"""
+    """Improved LinkedIn job scraper with anti-blocking measures"""
     
     def __init__(self):
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.google.com/"
         }
-        self.preference_map = {"Remote": "2", "Onsite": "1", "Hybrid": "3"}
-        
+        self.preference_map = {"Remote": "2", "Hybrid": "3", "Onsite": "1"}
+
     @lru_cache(maxsize=100)
-    def get_job_page(self, url: str) -> str:
-        """Cached method to fetch job pages with rate limiting"""
-        time.sleep(1)  # Rate limiting
+    def fetch_page(self, url: str) -> str:
+        """Cached page fetcher with rate limiting"""
+        time.sleep(1.5)
         try:
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
             return response.text
-        except requests.RequestException as e:
-            logger.error(f"Error fetching jobs: {e}")
+        except Exception as e:
+            logger.error(f"Fetch error: {e}")
             return ""
 
     def parse_job_card(self, card: BeautifulSoup, preference: str) -> Union[JobPosting, None]:
-        """Parse individual job card with error handling"""
+        """Robust job card parser with multiple fallbacks"""
         try:
-            title = card.find("h3", class_="base-search-card__title")
-            company = card.find("h4", class_="base-search-card__subtitle")
-            location = card.find("span", class_="job-search-card__location")
-            link = card.find("a", class_="base-card__full-link")
-            posted_date = card.find("time")["datetime"] if card.find("time") else "Not specified"
+            # Primary selectors
+            title_elem = card.select_one('h3.base-search-card__title, h4.job-card-title')
+            company_elem = card.select_one('h4.base-search-card__subtitle, div.job-card-company-name')
+            location_elem = card.select_one('span.job-search-card__location, div.job-card-location')
+            link_elem = card.select_one('a.base-card__full-link, a.job-card-link')
             
-            # Use `.get_text(strip=True)` only if the element exists, else provide fallback
-            title = title.get_text(strip=True) if title else "Title not found"
-            company = company.get_text(strip=True) if company else "Company not found"
-            location = location.get_text(strip=True) if location else "Location not found"
-            link = link["href"] if link else "Link not available"
+            # Fallback selectors
+            if not title_elem:
+                title_elem = card.find('a', {'data-tracking-control-name': 'public_jobs_jserp-result_search-card'})
+            if not company_elem:
+                company_elem = card.find('a', {'data-tracking-control-name': 'public_jobs_company-name'})
             
-            # Extract experience requirements
-            job_description = f"{title} at {company} in {location}"
-            experience_match = re.search(
-                r"(\d+\s*-\s*\d+\s*years?|\d+\s*years?|entry-level|mid-level|senior)",
-                job_description.lower()
-            )
-            experience = experience_match.group(0) if experience_match else "Experience not specified"
+            # Text extraction
+            title = title_elem.get_text(strip=True) if title_elem else 'N/A'
+            company = company_elem.get_text(strip=True) if company_elem else 'N/A'
+            location = location_elem.get_text(strip=True) if location_elem else 'N/A'
+            link = link_elem['href'].split('?')[0] if link_elem else 'N/A'
             
+            # Date parsing
+            date_elem = card.select_one('time.job-search-card__listdate, time.job-card-list__date')
+            posted_date = date_elem['datetime'] if date_elem else 'N/A'
+            
+            # Experience parsing
+            job_text = f"{title} {company} {location}".lower()
+            exp_match = re.search(r'(\d+\+?[\s-]*\d*)\s*(years?|yrs?)|(senior|mid|junior)', job_text)
+            experience = exp_match.group(1) if exp_match and exp_match.group(1) else 'N/A'
+
             return JobPosting(
                 title=title,
                 company=company,
@@ -176,326 +181,160 @@ class LinkedInJobScraper:
                 preference=preference
             )
         except Exception as e:
-            logger.warning(f"Error parsing job card: {e}")
+            logger.error(f"Parse error: {e}")
             return None
 
     def scrape_jobs(self, position: str, location: str, preferences: List[str]) -> List[JobPosting]:
-        """Scrape jobs with improved error handling and rate limiting"""
+        """Main scraping function"""
         jobs = []
-        
-        for preference in preferences:
-            base_url = (
-                f"https://www.linkedin.com/jobs/search?"
-                f"keywords={position}&location={location}"
-                f"&f_WT={self.preference_map[preference]}"
-            )
-            
-            html_content = self.get_job_page(base_url)
-            if not html_content:
+        for pref in preferences:
+            url = f"https://www.linkedin.com/jobs/search?keywords={position}&location={location}&f_WT={self.preference_map[pref]}"
+            page_content = self.fetch_page(url)
+            if not page_content:
                 continue
-                    
-            soup = BeautifulSoup(html_content, "html.parser")
-            job_cards = soup.find_all("div", class_="base-card")
+                
+            soup = BeautifulSoup(page_content, 'html.parser')
+            cards = soup.find_all('div', class_='base-card')
             
-            for card in job_cards:
-                if job := self.parse_job_card(card, preference):
+            for card in cards:
+                if job := self.parse_job_card(card, pref):
                     jobs.append(job)
-                else:
-                    logger.warning(f"Skipped a job card due to parsing issues.")  # Fallback and log the issue
-                    
         return jobs
 
-
 class JobMatcher:
-    """Enhanced job matching with multiple scoring factors"""
+    """Enhanced job matching algorithm"""
     
     def __init__(self):
         self.vectorizer = TfidfVectorizer(
-            stop_words="english",
-            ngram_range=(1, 2),  # Consider both single words and pairs
-            max_features=5000,    # Limit to most important features
-            min_df=2              # Ignore very rare terms
+            stop_words='english',
+            ngram_range=(1, 2),
+            max_features=5000
         )
-        
-        # Skill importance weights by category
-        self.skill_weights = {
-            'technical': 1.5,    # Programming languages, tools, etc.
-            'soft': 1.2,         # Communication, leadership, etc.
-            'domain': 1.3,       # Industry-specific knowledge
-            'certification': 1.4  # Professional certifications
-        }
-        
-        # Common skill mappings
-        self.skill_categories = {
-            'technical': {
-                'python', 'java', 'sql', 'aws', 'azure', 'docker', 'kubernetes',
-                'react', 'javascript', 'machine learning', 'data analysis'
-            },
-            'soft': {
-                'leadership', 'communication', 'teamwork', 'problem solving',
-                'project management', 'agile', 'scrum'
-            },
-            'domain': {
-                'healthcare', 'finance', 'marketing', 'sales', 'consulting',
-                'manufacturing', 'retail', 'education'
-            },
-            'certification': {
-                'pmp', 'aws certified', 'cissp', 'cpa', 'six sigma',
-                'scrum master', 'professional certified'
-            }
-        }
+        self.base_score = 0.25  # Minimum match score
 
-    def preprocess_text(self, text: str) -> str:
-        """Enhanced text preprocessing"""
-        # Convert to lowercase and remove special characters
-        text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text.lower())
+    def calculate_match(self, resume: ResumeData, jobs: List[JobPosting], exp: int, location: str) -> List[JobPosting]:
+        """Calculate matching scores"""
+        resume_text = ' '.join(resume.skills)
         
-        # Standardize variations of common terms
-        replacements = {
-            r'\b(yrs?|years)\b': 'years',
-            r'\b(sr\.|senior)\b': 'senior',
-            r'\b(jr\.|junior)\b': 'junior',
-            r'\b(exp|experience)\b': 'experience',
-            r'\b(dev|developer)\b': 'developer',
-            r'\b(eng|engineer)\b': 'engineer',
-            r'\b(mgr|manager)\b': 'manager'
-        }
-        
-        for pattern, replacement in replacements.items():
-            text = re.sub(pattern, replacement, text)
-            
-        return text
-
-    def calculate_skill_match_score(self, resume_skills: List[str], job_text: str) -> float:
-        """Calculate weighted skill match score"""
-        job_text_lower = job_text.lower()
-        total_weight = 0
-        matched_weight = 0
-        
-        for category, weight in self.skill_weights.items():
-            category_skills = self.skill_categories[category]
-            relevant_skills = set(skill for skill in resume_skills 
-                                if skill.lower() in category_skills)
-            
-            if relevant_skills:
-                total_weight += weight
-                matched_skills = sum(1 for skill in relevant_skills 
-                                   if skill.lower() in job_text_lower)
-                matched_weight += (matched_skills / len(relevant_skills)) * weight
-        
-        return matched_weight / total_weight if total_weight > 0 else 0
-
-    def calculate_experience_match(self, user_experience: int, job_text: str) -> float:
-        """Calculate experience match score"""
-        # Extract experience requirements from job text
-        patterns = [
-            r'(\d+)\+?\s*(?:-\s*\d+)?\s*years?',  # e.g., "5+ years" or "5-7 years"
-            r'(\d+)\s*years?\s*(?:of)?\s*experience',
-            r'senior\s*level.*?(\d+)\s*years?'
-        ]
-        
-        required_exp = None
-        for pattern in patterns:
-            if match := re.search(pattern, job_text.lower()):
-                required_exp = int(match.group(1))
-                break
-        
-        if required_exp is None:
-            # If no explicit requirement, infer from level mentions
-            if 'senior' in job_text.lower():
-                required_exp = 5
-            elif 'mid' in job_text.lower():
-                required_exp = 3
-            elif 'junior' in job_text.lower() or 'entry' in job_text.lower():
-                required_exp = 0
-            else:
-                return 0.5  # Neutral score if no experience info
-        
-        # Calculate match score based on difference
-        diff = abs(user_experience - required_exp)
-        if diff == 0:
-            return 1.0
-        elif diff <= 2:
-            return 0.8
-        elif diff <= 4:
-            return 0.6
-        else:
-            return 0.4
-
-    def calculate_location_match(self, preferred_location: str, job_location: str) -> float:
-        """Calculate location match score"""
-        preferred = preferred_location.lower()
-        actual = job_location.lower()
-        
-        # Exact city match
-        if preferred in actual or actual in preferred:
-            return 1.0
-            
-        # State/region match
-        preferred_parts = set(preferred.split())
-        actual_parts = set(actual.split())
-        common_parts = preferred_parts & actual_parts
-        
-        if common_parts:
-            return 0.8
-            
-        # Remote flexibility
-        if 'remote' in actual:
-            return 0.7
-            
-        return 0.3
-
-    def match_jobs(self, resume_data: ResumeData, jobs: List[JobPosting], 
-                  user_experience: int, location_pref: str) -> List[JobPosting]:
-        """Enhanced job matching with multiple weighted criteria"""
         for job in jobs:
-            # Prepare job text
-            job_text = self.preprocess_text(
-                f"{job.title} {job.company} {job.location} {job.experience}"
-            )
+            job_text = f"{job.title} {job.company} {job.experience}".lower()
             
-            # Calculate individual scores
-            skill_score = self.calculate_skill_match_score(resume_data.skills, job_text)
-            exp_score = self.calculate_experience_match(user_experience, job_text)
-            location_score = self.calculate_location_match(location_pref, job.location)
+            # TF-IDF Similarity
+            vectors = self.vectorizer.fit_transform([resume_text, job_text])
+            content_score = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
             
-            # Calculate content similarity using TF-IDF
-            try:
-                resume_text = " ".join(resume_data.skills)
-                vectors = self.vectorizer.fit_transform([resume_text, job_text])
-                content_score = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
-            except Exception as e:
-                logger.warning(f"Error in similarity calculation: {e}")
-                content_score = 0
+            # Experience match
+            exp_score = self._match_experience(exp, job.experience)
             
-            # Calculate final weighted score
-            weights = {
-                'skill': 0.4,
-                'experience': 0.25,
-                'location': 0.15,
-                'content': 0.2
-            }
+            # Location match
+            loc_score = self._match_location(location, job.location)
             
+            # Skill match
+            skill_score = len(set(resume.skills) & set(job_text.split())) / len(resume.skills)
+            
+            # Weighted final score
             final_score = (
-                skill_score * weights['skill'] +
-                exp_score * weights['experience'] +
-                location_score * weights['location'] +
-                content_score * weights['content']
+                0.4 * content_score +
+                0.3 * exp_score +
+                0.2 * loc_score +
+                0.1 * skill_score +
+                self.base_score
             )
-            
             job.similarity = min(1.0, final_score)
             
         return sorted(jobs, key=lambda x: x.similarity, reverse=True)
 
-def create_streamlit_app():
-    """Create the Streamlit user interface"""
-    st.set_page_config(page_title="LinkedIn Job Matcher", layout="wide")
+    def _match_experience(self, user_exp: int, job_exp: str) -> float:
+        """Experience matching logic"""
+        if 'senior' in job_exp.lower():
+            return 0.8 if user_exp >= 5 else 0.4
+        if 'mid' in job_exp.lower():
+            return 0.7 if user_exp >= 3 else 0.5
+        if 'junior' in job_exp.lower():
+            return 0.6 if user_exp <= 2 else 0.4
+        return 0.5
+
+    def _match_location(self, user_loc: str, job_loc: str) -> float:
+        """Location matching logic"""
+        user_loc = user_loc.lower()
+        job_loc = job_loc.lower()
+        if 'remote' in job_loc:
+            return 0.9
+        if any(word in job_loc for word in user_loc.split()):
+            return 0.7
+        return 0.3
+
+def main():
+    """Streamlit UI Configuration"""
+    st.set_page_config(page_title="AI Job Matcher", layout="wide")
+    st.title("🔍 AI-Powered Job Matching System")
     
-    st.title("🎯 LinkedIn Job Matcher")
-    st.markdown("""
-    Find your perfect job match by uploading your resume and setting your preferences.
-    This tool analyzes your skills and experience to find the most relevant opportunities on LinkedIn.
-    """)
-    
-    # Create sidebar for inputs
     with st.sidebar:
-        st.header("📝 Job Search Parameters")
-        position = st.text_input("Job Title:", placeholder="e.g., Data Scientist")
-        location = st.text_input("Location:", placeholder="e.g., New York")
-        
-        st.subheader("🏢 Work Preferences")
-        preferences = []
-        for pref in ["Remote", "Hybrid", "Onsite"]:
-            if st.checkbox(pref):
-                preferences.append(pref)
-                
-        experience = st.number_input(
-            "Years of Experience:",
-            min_value=0,
-            max_value=50,
-            value=0,
-            step=1
-        )
-        
-        uploaded_file = st.file_uploader(
-            "Upload Resume (PDF/DOCX):",
-            type=["pdf", "docx"]
-        )
+        st.header("Search Parameters")
+        position = st.text_input("Desired Position", placeholder="Software Engineer")
+        location = st.text_input("Preferred Location", placeholder="New York")
+        experience = st.number_input("Years of Experience", min_value=0, max_value=50, value=0)
+        preferences = [pref for pref in ["Remote", "Hybrid", "Onsite"] if st.checkbox(pref)]
+        resume_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
     
-    # Main content area
-    if st.sidebar.button("🔍 Find Matching Jobs"):
-        if not all([uploaded_file, position, location, preferences]):
-            st.error("Please fill in all required fields and upload your resume.")
+    if st.sidebar.button("Find Matching Jobs"):
+        if not all([resume_file, position, location, preferences]):
+            st.error("Please complete all required fields")
             return
             
         try:
-            # Initialize components
+            # Process resume
             parser = ResumeParser()
+            file_type = 'pdf' if resume_file.name.endswith('.pdf') else 'docx'
+            temp_file = f"temp_resume.{file_type}"
+            
+            with open(temp_file, "wb") as f:
+                f.write(resume_file.getbuffer())
+                
+            resume_data = parser.parse_resume(temp_file, file_type)
+            
+            # Scrape and match jobs
             scraper = LinkedInJobScraper()
             matcher = JobMatcher()
             
-            # Process resume
-            file_type = "pdf" if uploaded_file.name.endswith(".pdf") else "docx"
-            temp_path = f"temp_resume.{file_type}"
-            
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            with st.spinner("Analyzing your resume..."):
-                resume_data = parser.parse_resume(temp_path, file_type)
-            
-            # Fetch and match jobs
-            with st.spinner("Searching for matching jobs..."):
+            with st.spinner("Scanning LinkedIn for opportunities..."):
                 jobs = scraper.scrape_jobs(position, location, preferences)
-                if not jobs:
-                    st.warning("No jobs found. Try adjusting your search criteria.")
-                    return
-                    
-                matched_jobs = matcher.match_jobs(
-                    resume_data, jobs, experience, location
-                )
+                matched_jobs = matcher.calculate_match(resume_data, jobs, experience, location)
             
             # Display results
-            st.subheader(f"🎉 Found {len(matched_jobs)} Matching Jobs")
+            st.subheader(f"🎯 Found {len(matched_jobs)} Relevant Positions")
             
             results_df = pd.DataFrame([{
-                "Match Score": f"{job.similarity * 100:.0f}%",
-                "Posted": job.posted_date if job.posted_date else "N/A",
-                "Title": job.title if job.title else "N/A",
-                "Company": job.company if job.company else "N/A",
-                "Location": job.location if job.location else "N/A",
-                "Type": job.preference if job.preference else "N/A",
-                "Link": job.link if job.link else "N/A"
+                "Match %": f"{job.similarity * 100:.0f}%",
+                "Title": job.title,
+                "Company": job.company,
+                "Location": job.location,
+                "Type": job.preference,
+                "Posted": job.posted_date,
+                "Link": job.link
             } for job in matched_jobs[:50]])
             
-            # Create a styled version of the dataframe
-            # styled_df = results_df.style.highlight_max(subset=["Match Score"])
-            
-            # Display the dataframe
             st.dataframe(
-                data=results_df,
-                column_config={
-                    "Link": st.column_config.LinkColumn("Job Link")
-                },
-                hide_index=True
+                results_df,
+                column_config={"Link": st.column_config.LinkColumn()},
+                hide_index=True,
+                use_container_width=True
             )
             
-            # Add download button
-            csv = results_df.to_csv(index=False).encode("utf-8")
+            # Export option
+            csv = results_df.to_csv(index=False)
             st.download_button(
-                "📥 Download Results",
+                "Export Results",
                 csv,
-                "matched_jobs.csv",
+                "job_matches.csv",
                 "text/csv"
             )
             
         except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
-            logger.exception("Error in job matching process")
+            st.error(f"System error: {str(e)}")
         finally:
-            # Cleanup
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
 
 if __name__ == "__main__":
-    create_streamlit_app()
+    main()
