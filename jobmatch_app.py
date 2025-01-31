@@ -146,8 +146,8 @@ class LinkedInJobScraper:
     def parse_job_card(self, card: BeautifulSoup, preference: str) -> Union[JobPosting, None]:
         """Parse individual job card with error handling"""
         try:
-            title = card.find("h3", class_="base-search-card__title")
-            company = card.find("h4", class_="base-search-card__subtitle")
+            title = html.escape(card.find("h3", class_="base-search-card__title").get_text(strip=True))
+            company = html.escape(card.find("h4", class_="base-search-card__subtitle").get_text(strip=True))
             location = card.find("span", class_="job-search-card__location")
             link = card.find("a", class_="base-card__full-link")
             posted_date = card.find("time")["datetime"] if card.find("time") else "Not specified"
@@ -461,8 +461,8 @@ def create_streamlit_app():
             results_df = pd.DataFrame([{
                 "Match Score": f"{job.similarity * 100:.0f}%",
                 "Posted": job.posted_date if job.posted_date else "N/A",
-                "Title": html.escape(job.title) if job.title else "N/A",
-                "Company": html.escape(job.company) if job.company else "N/A",
+                "Title": job.title if job.title else "N/A",
+                "Company": job.company if job.company else "N/A",
                 "Location": job.location if job.location else "N/A",
                 "Type": job.preference if job.preference else "N/A",
                 "Link": job.link if job.link else "N/A"
