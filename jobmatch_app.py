@@ -146,8 +146,20 @@ class LinkedInJobScraper:
     def parse_job_card(self, card: BeautifulSoup, preference: str) -> Union[JobPosting, None]:
         """Parse individual job card with error handling"""
         try:
-            title = card.find("h3", class_="base-search-card__title")
-            company = card.find("h4", class_="base-search-card__subtitle")
+            title_elem = card.find("h3", class_="base-search-card__title")
+            company_elem = card.find("h4", class_="base-search-card__subtitle")
+            title = (
+            title_elem.get_text(strip=True) 
+            if title_elem else 
+            card.find("a", class_="hidden-nested-link").get_text(strip=True) 
+            if card.find("a", class_="hidden-nested-link") else 
+            "Title not found")
+            company = (
+            company_elem.get_text(strip=True) 
+            if company_elem else 
+            card.find("a", class_="base-card__subtitle-link").get_text(strip=True)
+            if card.find("a", class_="base-card__subtitle-link") else 
+            "Company not found")
             location = card.find("span", class_="job-search-card__location")
             link = card.find("a", class_="base-card__full-link")
             posted_date = card.find("time")["datetime"] if card.find("time") else "Not specified"
