@@ -468,7 +468,7 @@ def create_streamlit_app():
             } for job in matched_jobs[:50]])
             
             # Create a styled version of the dataframe
-            styled_df = results_df.style.highlight_max(subset=["Match Score"])
+            # styled_df = results_df.style.highlight_max(subset=["Match Score"])
             
             # Display the dataframe
             st.dataframe(
