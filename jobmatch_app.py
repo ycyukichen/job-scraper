@@ -17,6 +17,7 @@ import os
 import time
 from functools import lru_cache
 import logging
+import html
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
